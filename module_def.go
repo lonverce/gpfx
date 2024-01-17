@@ -1,7 +1,7 @@
 package gpfx
 
 var ModuleDef = &Module{
-	Name: "gpfx.gpfx",
+	Name: "gpfx",
 	ConfigureServices: func(ctx *ModuleConfigurator) {
 		services := ctx.GetRegistry()
 		ConfigOptions[ScopeStorageOption](ctx, func(option *ScopeStorageOption) {
@@ -12,7 +12,6 @@ var ModuleDef = &Module{
 		services.AddLifetimeCreatedEventHandler(func(parent, child ServiceContext) {
 			parentStorage := LoadService[*internalScopeStorage](parent)
 			childStorage := LoadService[*internalScopeStorage](child)
-			childStorage.options = parentStorage.options
 			childStorage.CopyFrom(parentStorage)
 		})
 	},

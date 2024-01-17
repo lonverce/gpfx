@@ -24,7 +24,7 @@ func NewRegistry() gpfx.ServiceRegistry {
 
 func (services *defaultServiceRegistry) AddService(item gpfx.RegistrationItem, types ...reflect.Type) {
 	if !item.UseInstance {
-		if item.Lifetime < 0 || item.Lifetime > gpfx.ExcludedMaxLifetime {
+		if item.Lifetime < 0 || item.Lifetime >= gpfx.ExcludedMaxLifetime {
 			panic("unknown Lifetime")
 		}
 
@@ -118,19 +118,33 @@ func (services *defaultServiceRegistry) Build() gpfx.LifetimeScope {
 	}
 
 	p.registrations[gpfx.Typeof[gpfx.ServiceContext]()] = []int{selfMaintainerIndex}
-	//p.registrations[gpfx.Typeof[gpfx.LifetimeScope]()] = []int{selfMaintainerIndex}
-	p.sharedPool = new(sync.Pool)
 
+	sharedPool := new(sync.Pool)
+	interimPool := new(sync.Pool)
+
+	p.sharedPool = sharedPool
+	p.interimPool = interimPool
+
+	p.isNew = false
 	regs := p.registrations
 	mSize := len(p.maintainers)
 	h := services.lifetimeCreatedEventHandlers
 
-	p.sharedPool.New = func() any {
+	sharedPool.New = func() any {
 		child := new(defaultServiceContext)
 		child.registrations = regs
 		child.maintainers = make([]serviceMaintainer, mSize)
 		child.lifetimeCreatedEventHandlers = h
+		child.sharedPool = sharedPool
+		child.interimPool = interimPool
+		child.isNew = true
 		return child
+	}
+
+	interimPool.New = func() any {
+		c := new(interimServiceContext)
+		c.instanceMap = make(map[serviceMaintainer]any)
+		return c
 	}
 
 	p.lifetimeCreatedEventHandlers = services.lifetimeCreatedEventHandlers

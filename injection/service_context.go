@@ -12,6 +12,8 @@ type defaultServiceContext struct {
 	registrations                map[reflect.Type][]int
 	lifetimeCreatedEventHandlers []gpfx.LifetimeCreatedEventHandler
 	sharedPool                   *sync.Pool
+	interimPool                  *sync.Pool
+	isNew                        bool
 }
 
 func (r *defaultServiceContext) LoadService(serviceType reflect.Type) any {
@@ -23,23 +25,27 @@ func (r *defaultServiceContext) LoadAllServices(serviceType reflect.Type) []any 
 	return r.getAllServicesByMaintainers(maintainers)
 }
 
+func clearInterimProviderAndPut(interimProvider *interimServiceContext, pool *sync.Pool) {
+	clear(interimProvider.instanceMap)
+	interimProvider.owner = nil
+	pool.Put(interimProvider)
+}
+
 func (r *defaultServiceContext) getRequiredServiceByMaintainer(maintainer serviceMaintainer) any {
-	interimProvider := &interimServiceContext{
-		owner: r,
-	}
+	interimProvider := r.interimPool.Get().(*interimServiceContext)
+	defer clearInterimProviderAndPut(interimProvider, r.interimPool)
+
+	interimProvider.owner = r
 	res := interimProvider.GetRequiredServiceByMaintainer(maintainer)
-	interimProvider.BeginInjections()
 	return res
 }
 
 func (r *defaultServiceContext) getAllServicesByMaintainers(maintainers []serviceMaintainer) []any {
-	interimProvider := &interimServiceContext{
-		owner:       r,
-		instanceMap: make(map[serviceMaintainer]any),
-	}
+	interimProvider := r.interimPool.Get().(*interimServiceContext)
+	defer clearInterimProviderAndPut(interimProvider, r.interimPool)
 
+	interimProvider.owner = r
 	results := interimProvider.getAllServicesByMaintainers(maintainers)
-	interimProvider.BeginInjections()
 	return results
 }
 
@@ -70,13 +76,11 @@ func (r *defaultServiceContext) getAllMaintainersByServiceType(serviceType refle
 func (r *defaultServiceContext) CreateScope() gpfx.LifetimeScope {
 	child := r.sharedPool.Get().(*defaultServiceContext)
 
-	if child.sharedPool == nil {
-		// created by pool
-		child.sharedPool = r.sharedPool
-
+	if child.isNew == true {
 		for i, maintainer := range r.maintainers {
 			child.maintainers[i] = maintainer.Fork(child)
 		}
+		child.isNew = false
 	} else {
 		for _, maintainer := range child.maintainers {
 			maintainer.ReUse()
