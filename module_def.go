@@ -13,7 +13,7 @@ var ModuleDef = &Module{
 			parentStorage := LoadService[*internalScopeStorage](parent)
 			childStorage := LoadService[*internalScopeStorage](child)
 			childStorage.options = parentStorage.options
-			parentStorage.CopyTo(childStorage)
+			childStorage.CopyFrom(parentStorage)
 		})
 	},
 

@@ -22,9 +22,11 @@ type ScopeStorage interface {
 	Delete(key *ScopeStorageKey)
 }
 
+type StorageCopyCallback func(val any, newCtx ServiceContext) any
+
 type storageItemOption struct {
 	key      string
-	callback func(val any) any
+	callback StorageCopyCallback
 	valType  reflect.Type
 }
 
@@ -32,7 +34,7 @@ type ScopeStorageOption struct {
 	defines map[*ScopeStorageKey]*storageItemOption
 }
 
-func (o *ScopeStorageOption) Define(key *ScopeStorageKey, valType reflect.Type, optionalCallback func(val any) any) {
+func (o *ScopeStorageOption) Define(key *ScopeStorageKey, valType reflect.Type, optionalCallback StorageCopyCallback) {
 	opt, exist := o.defines[key]
 	if exist {
 		panic("redefined storage key")
@@ -49,6 +51,7 @@ func (o *ScopeStorageOption) Define(key *ScopeStorageKey, valType reflect.Type, 
 type internalScopeStorage struct {
 	data    sync.Map
 	options *ScopeStorageOption
+	ctx     ServiceContext
 }
 
 func (storage *internalScopeStorage) validateKey(key *ScopeStorageKey) *storageItemOption {
@@ -60,6 +63,10 @@ func (storage *internalScopeStorage) validateKey(key *ScopeStorageKey) *storageI
 		panic("undefined key")
 	}
 	return opt
+}
+
+func (storage *internalScopeStorage) Inject(ctx InterimServiceContext) {
+	storage.ctx = ctx.GetOwner()
 }
 
 func (storage *internalScopeStorage) Get(key *ScopeStorageKey) (any, bool) {
@@ -81,20 +88,22 @@ func (storage *internalScopeStorage) Delete(key *ScopeStorageKey) {
 	storage.data.Delete(key)
 }
 
-func (storage *internalScopeStorage) CopyTo(dest *internalScopeStorage) {
-	storage.data.Range(func(key, value any) bool {
+func (storage *internalScopeStorage) CopyFrom(src *internalScopeStorage) {
+	storage.options = src.options
+
+	src.data.Range(func(key, value any) bool {
 		opt, ok := storage.options.defines[key.(*ScopeStorageKey)]
 		if !ok {
 			panic("found undefined key while copying")
 		}
 		if opt.callback != nil {
-			newVal := opt.callback(value)
+			newVal := opt.callback(value, storage.ctx)
 			if !reflect.TypeOf(newVal).AssignableTo(opt.valType) {
 				panic("callback function returns a new value which do not match to pre-defined value type")
 			}
 			value = newVal
 		}
-		dest.data.Store(key, value)
+		storage.data.Store(key, value)
 		return true
 	})
 }
