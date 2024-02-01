@@ -2,6 +2,8 @@ package gpfx
 
 import (
 	"fmt"
+	"github.com/lonverce/gpfx/config"
+	"github.com/lonverce/gpfx/service"
 	"reflect"
 	"sync"
 )
@@ -22,16 +24,16 @@ type ScopeStorage interface {
 	Delete(key *ScopeStorageKey)
 }
 
-type StorageCopyCallback func(val any, newCtx ServiceContext) any
+type StorageCopyCallback func(val any, newCtx service.Provider) any
 
-type storageItemOption struct {
+type StorageItemOption struct {
 	key      string
 	callback StorageCopyCallback
 	valType  reflect.Type
 }
 
 type ScopeStorageOption struct {
-	defines map[*ScopeStorageKey]*storageItemOption
+	defines map[*ScopeStorageKey]*StorageItemOption
 }
 
 func (o *ScopeStorageOption) Define(key *ScopeStorageKey, valType reflect.Type, optionalCallback StorageCopyCallback) {
@@ -40,7 +42,7 @@ func (o *ScopeStorageOption) Define(key *ScopeStorageKey, valType reflect.Type, 
 		panic("redefined storage key")
 	}
 
-	opt = &storageItemOption{
+	opt = &StorageItemOption{
 		key:      key.id,
 		valType:  valType,
 		callback: optionalCallback,
@@ -48,34 +50,30 @@ func (o *ScopeStorageOption) Define(key *ScopeStorageKey, valType reflect.Type, 
 	o.defines[key] = opt
 }
 
-type internalScopeStorage struct {
+type DefaultScopeStorage struct {
 	data    sync.Map
-	options *ScopeStorageOption
-	ctx     ServiceContext
+	Options config.Option[ScopeStorageOption] `gpfx.inject:""`
+	Ctx     service.Provider                  `gpfx.inject:""`
 }
 
-func (storage *internalScopeStorage) validateKey(key *ScopeStorageKey) *storageItemOption {
+func (storage *DefaultScopeStorage) ValidateKey(key *ScopeStorageKey) *StorageItemOption {
 	if key == nil {
 		panic("scoped local key is null")
 	}
-	opt, exist := storage.options.defines[key]
+	opt, exist := storage.Options.OnceValue().defines[key]
 	if !exist {
 		panic("undefined key")
 	}
 	return opt
 }
 
-func (storage *internalScopeStorage) Inject(ctx InterimServiceContext) {
-	storage.ctx = ctx.GetOwner()
-}
-
-func (storage *internalScopeStorage) Get(key *ScopeStorageKey) (any, bool) {
-	storage.validateKey(key)
+func (storage *DefaultScopeStorage) Get(key *ScopeStorageKey) (any, bool) {
+	storage.ValidateKey(key)
 	return storage.data.Load(key)
 }
 
-func (storage *internalScopeStorage) Set(key *ScopeStorageKey, newVal any) {
-	opt := storage.validateKey(key)
+func (storage *DefaultScopeStorage) Set(key *ScopeStorageKey, newVal any) {
+	opt := storage.ValidateKey(key)
 
 	if !reflect.TypeOf(newVal).AssignableTo(opt.valType) {
 		panic("The given value do not match to pre-defined value type")
@@ -84,21 +82,21 @@ func (storage *internalScopeStorage) Set(key *ScopeStorageKey, newVal any) {
 	storage.data.Store(key, newVal)
 }
 
-func (storage *internalScopeStorage) Delete(key *ScopeStorageKey) {
+func (storage *DefaultScopeStorage) Delete(key *ScopeStorageKey) {
 	storage.data.Delete(key)
 }
 
-func (storage *internalScopeStorage) CopyFrom(src *internalScopeStorage) {
-	storage.options = src.options
+func (storage *DefaultScopeStorage) CopyFrom(src *DefaultScopeStorage) {
+	opt := storage.Options.OnceValue()
 
 	src.data.Range(func(key, value any) bool {
-		opt, ok := storage.options.defines[key.(*ScopeStorageKey)]
+		itemOpt, ok := opt.defines[key.(*ScopeStorageKey)]
 		if !ok {
 			panic("found undefined key while copying")
 		}
-		if opt.callback != nil {
-			newVal := opt.callback(value, storage.ctx)
-			if !reflect.TypeOf(newVal).AssignableTo(opt.valType) {
+		if itemOpt.callback != nil {
+			newVal := itemOpt.callback(value, storage.Ctx)
+			if !reflect.TypeOf(newVal).AssignableTo(itemOpt.valType) {
 				panic("callback function returns a new value which do not match to pre-defined value type")
 			}
 			value = newVal

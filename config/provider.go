@@ -1,9 +1,9 @@
-package gpfx
+package config
 
 import "time"
 
-// Configuration 配置
-type Configuration interface {
+// Provider 配置
+type Provider interface {
 	GetString(key string) (val string, exist bool)
 	GetStringSlice(key string) (val []string, exist bool)
 	GetStringMap(key string) (map[string]any, bool)
@@ -16,11 +16,11 @@ type Configuration interface {
 	GetTime(key string) (val time.Time, exist bool)
 	GetDuration(key string) (val time.Duration, exist bool)
 	IsSet(key string) bool
-	Sub(key string) Configuration
+	Sub(key string) Provider
 	Unmarshal(key string, structPointer any) bool
 }
 
-func GetStringOrDefault(c Configuration, key string, defaultVal string) string {
+func GetStringOrDefault(c Provider, key string, defaultVal string) string {
 	val, ok := c.GetString(key)
 	if !ok {
 		return defaultVal
@@ -28,7 +28,7 @@ func GetStringOrDefault(c Configuration, key string, defaultVal string) string {
 	return val
 }
 
-func GetBoolOrDefault(c Configuration, key string, defaultVal bool) bool {
+func GetBoolOrDefault(c Provider, key string, defaultVal bool) bool {
 	val, ok := c.GetBool(key)
 	if !ok {
 		return defaultVal
@@ -36,7 +36,7 @@ func GetBoolOrDefault(c Configuration, key string, defaultVal bool) bool {
 	return val
 }
 
-func GetIntOrDefault(c Configuration, key string, defaultVal int) int {
+func GetIntOrDefault(c Provider, key string, defaultVal int) int {
 	val, ok := c.GetInt(key)
 	if !ok {
 		return defaultVal
@@ -44,7 +44,7 @@ func GetIntOrDefault(c Configuration, key string, defaultVal int) int {
 	return val
 }
 
-func GetFloat64OrDefault(c Configuration, key string, defaultVal float64) float64 {
+func GetFloat64OrDefault(c Provider, key string, defaultVal float64) float64 {
 	val, ok := c.GetFloat64(key)
 	if !ok {
 		return defaultVal
@@ -52,7 +52,7 @@ func GetFloat64OrDefault(c Configuration, key string, defaultVal float64) float6
 	return val
 }
 
-func GetStruct[T any](c Configuration, key string) *T {
+func GetStruct[T any](c Provider, key string) *T {
 	s := new(T)
 	if !c.Unmarshal(key, s) {
 		return nil

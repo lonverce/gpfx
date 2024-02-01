@@ -1,5 +1,7 @@
 package gpfx
 
+import "github.com/lonverce/gpfx/service"
+
 // HostedService 模块初始化后立即启动的服务
 type HostedService interface {
 	// Start 在后台启动服务, 该方法在主线程中调用, 实现方不能阻塞此方法
@@ -9,21 +11,21 @@ type HostedService interface {
 	Stop()
 }
 
-type hostedServiceManager struct {
-	services []HostedService
+type HostedServiceManager struct {
+	services        []HostedService
+	ServiceBuilders []func(provider service.Provider) HostedService `gpfx.inject:""`
+	Provider        service.Provider                                `gpfx.inject:""`
 }
 
-func (h *hostedServiceManager) Inject(provider InterimServiceContext) {
-	h.services = LoadAllServices[HostedService](provider)
-}
-
-func (h *hostedServiceManager) StartAllServices() {
-	for _, service := range h.services {
-		service.Start()
+func (h *HostedServiceManager) StartAllServices() {
+	for _, builder := range h.ServiceBuilders {
+		srv := builder(h.Provider)
+		srv.Start()
+		h.services = append(h.services, srv)
 	}
 }
 
-func (h *hostedServiceManager) StopAllServices() {
+func (h *HostedServiceManager) StopAllServices() {
 	for i := len(h.services); i > 0; i-- {
 		h.services[i-1].Stop()
 	}

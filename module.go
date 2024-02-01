@@ -9,6 +9,7 @@ type Module struct {
 	Name                    string
 	DependOn                []*Module
 	ConfigureServices       func(ctx *ModuleConfigurator)
+	PostConfigureServices   func(ctx *ModulePostConfigurator)
 	OnApplicationInitialize func(ctx *ModuleInitializer)
 	OnApplicationShutdown   func()
 }

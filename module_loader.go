@@ -23,7 +23,7 @@ func (ctx *moduleLoader) Load(current *Module, prefix string) {
 		return
 	}
 
-	log.Printf("[gpfx] - %s%s\n", prefix, current.GetString())
+	log.Printf("[gpfx] %s┋┉ %s\n", prefix, current.GetString())
 	if current.DependOn == nil || len(current.DependOn) == 0 {
 		ctx.moduleState[current] = completed
 
@@ -31,7 +31,7 @@ func (ctx *moduleLoader) Load(current *Module, prefix string) {
 		return
 	}
 
-	prefix = "  " + prefix
+	prefix = prefix + "┋  "
 	ctx.moduleState[current] = blocking
 	for _, child := range current.DependOn {
 		if child == nil {

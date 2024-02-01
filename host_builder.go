@@ -1,14 +1,16 @@
 package gpfx
 
 import (
+	"github.com/lonverce/gpfx/config"
+	"github.com/lonverce/gpfx/service"
 	"log"
 	"reflect"
 )
 
 type HostBuilder struct {
 	StartupModule *Module
-	Configuration Configuration
-	Registry      ServiceRegistry
+	Configuration config.Provider
+	Registry      service.Registry
 }
 
 func (builder *HostBuilder) Build() *Host {
@@ -36,11 +38,36 @@ func (builder *HostBuilder) Build() *Host {
 		module.ConfigureServices(cfgCtx)
 	}
 
-	// 补充注册
-	AddInstanceOnly(cfgCtx.services, builder.Configuration)
-	AddService[hostedServiceManager](builder.Registry, Transient, Typeof[*hostedServiceManager]())
-	for _, optionBuilder := range cfgCtx.optionBuilders {
-		optionBuilder.PublishToRegistry(cfgCtx.services)
+	postCtx := &ModulePostConfigurator{
+		services:      builder.Registry,
+		configuration: builder.Configuration,
+		options:       make(map[reflect.Type]any),
+	}
+	{
+		for _, optionBuilder := range cfgCtx.optionBuilders {
+			o, t := optionBuilder.Build()
+			postCtx.options[t] = o
+		}
+
+		for _, module := range ctx.solvedModules {
+
+			if module.PostConfigureServices == nil {
+				continue
+			}
+			module.PostConfigureServices(postCtx)
+		}
+	}
+
+	{
+		// 补充注册
+		service.AddInstanceOnly(cfgCtx.services, builder.Configuration)
+		service.AddTransient[HostedServiceManager](builder.Registry, service.Typeof[*HostedServiceManager]())
+		for optionType, optionInstance := range postCtx.options {
+			cfgCtx.services.AddService(service.Registration{
+				Lifetime: service.ExternalInstance,
+				Instance: optionInstance,
+			}, optionType)
+		}
 	}
 
 	rootScope := cfgCtx.GetRegistry().Build()

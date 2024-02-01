@@ -2,6 +2,7 @@ package gpfx
 
 import (
 	"fmt"
+	"github.com/lonverce/gpfx/service"
 	"log"
 	"os"
 	"os/signal"
@@ -9,15 +10,15 @@ import (
 )
 
 type Host struct {
-	rootScope LifetimeScope
+	rootScope service.LifetimeScope
 	modules   []*Module
-	mgr       *hostedServiceManager
+	mgr       *HostedServiceManager
 }
 
 func (app *Host) Start() {
 	log.Println("[gpfx] 正在初始化应用程序")
 	initCtx := &ModuleInitializer{
-		ctx: app.rootScope.GetServiceContext(),
+		ctx: app.rootScope.GetProvider(),
 	}
 
 	for _, module := range app.modules {
@@ -28,7 +29,8 @@ func (app *Host) Start() {
 	}
 
 	log.Println("[gpfx] 应用程序初始化完成, 正在启动服务集")
-	mgr := LoadService[*hostedServiceManager](app.rootScope.GetServiceContext())
+	var mgr *HostedServiceManager
+	service.MustLoad(app.rootScope.GetProvider(), &mgr)
 	mgr.StartAllServices()
 	app.mgr = mgr
 	log.Println("[gpfx] 应用程序服务集启动成功.")
